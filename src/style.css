@@ -39,10 +39,13 @@ button:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
 .goal.bump { transform: scale(1.15); }
 .goal.done { opacity: .55; }
 .goal svg { width: 24px; height: 24px; }
-.score { margin-top: auto; text-align: center; font-weight: 800; font-size: 22px; letter-spacing: 1px; font-variant-numeric: tabular-nums; color: var(--fg); opacity: .85; }
+.bottom { margin-top: auto; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.score { text-align: center; font-weight: 800; font-size: 20px; letter-spacing: 1px; font-variant-numeric: tabular-nums; color: var(--fg); opacity: .85; }
+#minimap { pointer-events: auto; display: block; touch-action: none; }
+.map-hint { font-size: 11px; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); opacity: .8; }
 .combo { position: absolute; left: 0; right: 0; top: 38%; text-align: center; font-size: 40px; font-weight: 900; letter-spacing: 2px; color: var(--cyan); text-shadow: 0 0 18px var(--cyan); opacity: 0; transform: scale(.7); transition: opacity .2s, transform .25s; }
 .combo.show { opacity: 1; transform: scale(1); }
-.tip { position: absolute; left: 16px; right: 16px; bottom: calc(env(safe-area-inset-bottom, 0px) + 64px); text-align: center; color: var(--fg); font-size: 15px; line-height: 1.5; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 10px 14px; transition: opacity .3s; }
+.tip { position: absolute; left: 16px; right: 16px; top: 22%; text-align: center; color: var(--fg); font-size: 15px; line-height: 1.5; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 10px 14px; transition: opacity .3s; }
 .tip:empty { opacity: 0; }
 
 /* Screens */

@@ -3,6 +3,7 @@ import {
   createBoard, twist, resolve, scoreFor, levelConfig, starsFor, faceBasis, LEVEL_COUNT, rng, FACE,
 } from './logic.js';
 import { sfx } from './audio.js';
+import { createMinimap } from './minimap.js';
 
 // ---------- Style C palette ----------
 const COLORS = [0xff2e88, 0x2ef2ff, 0x39ff8f, 0xffe14d, 0xb14dff];
@@ -21,7 +22,7 @@ const save = loadSave();
 // ---------- Three.js setup ----------
 const stage = document.getElementById('stage');
 const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.75));
 stage.appendChild(renderer.domElement);
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(36, 1, 0.1, 100);
@@ -31,8 +32,15 @@ const rimLight = new THREE.DirectionalLight(0xffffff, 0.35 * Math.PI); rimLight.
 
 const cube = new THREE.Group();
 scene.add(cube);
-const HOME_Q = new THREE.Quaternion().setFromEuler(new THREE.Euler(0.5, -0.65, 0));
-cube.quaternion.copy(HOME_Q);
+// Turntable view: yaw spins around the cube's vertical axis, pitch tilts (clamped),
+// so the cube never tumbles into a confusing orientation.
+const HOME = { yaw: -0.65, pitch: 0.42 };
+const PITCH_MAX = 1.05;
+const view = { yaw: HOME.yaw, pitch: HOME.pitch, vy: 0, vp: 0 };
+const _e = new THREE.Euler(0, 0, 0, 'XYZ');
+function applyView() { _e.set(view.pitch, view.yaw, 0); cube.quaternion.setFromEuler(_e); }
+function setView(yaw, pitch) { view.yaw = yaw; view.pitch = pitch; view.vy = view.vp = 0; applyView(); }
+applyView();
 
 function roundedTile(w, r, depth) {
   const s = new THREE.Shape(), x = -w / 2, y = -w / 2;
@@ -100,9 +108,9 @@ function resize() {
   renderer.setSize(w, h);
   camera.aspect = w / h;
   const r = 3.35; // bounding radius of the cube with items
-  const vf = THREE.MathUtils.degToRad(camera.fov) / 2;
-  const hf = Math.atan(Math.tan(vf) * camera.aspect);
-  camera.position.set(0, -0.35, Math.max(r / Math.sin(vf), r / Math.sin(hf)) * 1.04);
+  const tv = Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2), th = tv * camera.aspect;
+  const d = Math.max(r / (tv * 0.58), r / (th * 0.97));
+  camera.position.set(0, -0.17 * d * tv, d); // cube sits a bit above centre, minimap below
   camera.updateProjectionMatrix();
 }
 window.addEventListener('resize', resize);
@@ -158,7 +166,7 @@ function startLevel(level) {
   G.playing = true;
   clearMeshes();
   for (const it of G.board.items) makeMesh(it);
-  cube.quaternion.copy(HOME_Q);
+  setView(HOME.yaw, HOME.pitch);
   show('game');
   renderHud();
   ui.tip.textContent = level === 1
@@ -166,6 +174,19 @@ function startLevel(level) {
     : level === 2 ? 'Drag on empty space to turn the whole cube. Twists can move items onto other faces.' : '';
   // Stagger-in
   [...meshes.values()].forEach((g, i) => { g.scale.setScalar(0.001); tween(260 + (i % 16) * 18, (t) => g.scale.setScalar(Math.max(0.001, ease(t)))); });
+}
+
+const TWIST_MS = 620;
+// Glowing frame around the slice being twisted.
+function makeBand(axis, layer) {
+  const size = [4.5, 4.5, 4.5]; size[axis] = 1.0;
+  const geo = new THREE.BoxGeometry(...size);
+  const lines = new THREE.LineSegments(new THREE.EdgesGeometry(geo), new THREE.LineBasicMaterial({ color: EDGE, transparent: true, opacity: 0 }));
+  const shell = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: EDGE, transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide }));
+  const g = new THREE.Group(); g.add(lines, shell);
+  g.position.setComponent(axis, layer * 0.5);
+  g.userData.setOpacity = (o) => { lines.material.opacity = o; shell.material.opacity = 0.1 * o; };
+  return g;
 }
 
 async function doTwist(axis, layer, dir) {
@@ -179,11 +200,17 @@ async function doTwist(axis, layer, dir) {
 
   const pivot = new THREE.Group();
   cube.add(pivot);
-  const groups = moved.map((it) => meshes.get(it.id));
+  const groups = moved.map((it) => meshes.get(it.id)).filter(Boolean);
   groups.forEach((g) => pivot.attach(g));
+  const band = makeBand(axis, layer);
+  pivot.add(band);
+  minimap.showRing(axis, layer, TWIST_MS + 700);
+  minimap.flash(moved.map((it) => it.id), 'move', TWIST_MS + 700);
   const ax = new THREE.Vector3(axis === 0 ? 1 : 0, axis === 1 ? 1 : 0, axis === 2 ? 1 : 0);
-  await tween(230, (t) => pivot.setRotationFromAxisAngle(ax, dir * ease(t) * Math.PI / 2));
-  moved.forEach((it, i) => { cube.attach(groups[i]); placeMesh(groups[i], it); });
+  await tween(140, (t) => band.userData.setOpacity(t));
+  await tween(TWIST_MS, (t) => pivot.setRotationFromAxisAngle(ax, dir * ease(t) * Math.PI / 2));
+  moved.forEach((it) => { const g = meshes.get(it.id); if (g) { cube.attach(g); placeMesh(g, it); } });
+  await tween(220, (t) => band.userData.setOpacity(1 - t));
   cube.remove(pivot);
 
   const steps = resolve(G.board, G.cfg.colors, G.random);
@@ -209,7 +236,9 @@ async function playStep(st) {
       cube.add(s); sparks.push(s);
     }
   }
-  await tween(260, (t) => {
+  minimap.flash(st.removed.map((it) => it.id), 'pop', 450);
+  await tween(160, (t) => removedGroups.forEach((g) => g.scale.setScalar(1 + 0.18 * Math.sin(t * Math.PI * 3))));
+  await tween(380, (t) => {
     const sc = t < 0.35 ? 1 + t * 0.9 : 1.32 * (1 - (t - 0.35) / 0.65);
     removedGroups.forEach((g) => g.scale.setScalar(Math.max(0.001, sc)));
     sparks.forEach((s) => { s.position.add(s.userData.v); s.scale.setScalar(Math.max(0.001, 1 - t)); });
@@ -227,7 +256,9 @@ async function playStep(st) {
   renderHud(bump);
 
   const added = st.added.map((it) => { const g = makeMesh(it); g.scale.setScalar(0.001); return g; });
-  await tween(220, (t) => added.forEach((g) => g.scale.setScalar(Math.max(0.001, ease(t)))));
+  minimap.flash(st.added.map((it) => it.id), 'pop', 500);
+  await tween(360, (t) => added.forEach((g) => g.scale.setScalar(Math.max(0.001, ease(t)))));
+  await wait(90);
 }
 
 function flashCombo(n) {
@@ -294,6 +325,27 @@ $('btn-levels').onclick = () => { sfx.unlock(); show('levels'); };
 $('btn-levels-back').onclick = () => show('home');
 $('btn-back').onclick = () => { hideResult(); show('home'); };
 
+// ---------- Minimap ----------
+const mapCanvas = document.getElementById('minimap');
+const minimap = createMinimap(mapCanvas, CSS_COLORS);
+mapCanvas.addEventListener('pointerdown', (e) => {
+  const r = mapCanvas.getBoundingClientRect();
+  const n = minimap.faceAt(e.clientX - r.left, e.clientY - r.top);
+  if (!n) return;
+  // Local face normal -> turn the view so that face is in front.
+  const from = { yaw: view.yaw, pitch: view.pitch };
+  let to;
+  if (n[1] !== 0) to = { yaw: view.yaw, pitch: n[1] > 0 ? PITCH_MAX : -PITCH_MAX };
+  else {
+    let yaw = Math.atan2(-n[0], n[2]) + 0.45;
+    while (yaw - from.yaw > Math.PI) yaw -= 2 * Math.PI;
+    while (yaw - from.yaw < -Math.PI) yaw += 2 * Math.PI;
+    to = { yaw, pitch: HOME.pitch };
+  }
+  view.vy = view.vp = 0;
+  tween(450, (t) => { const k = ease(t); setView(from.yaw + (to.yaw - from.yaw) * k, from.pitch + (to.pitch - from.pitch) * k); });
+});
+
 // ---------- Input: swipe an item to twist, drag empty space to orbit ----------
 const raycaster = new THREE.Raycaster();
 const ndc = new THREE.Vector2();
@@ -354,8 +406,10 @@ stage.addEventListener('pointermove', (e) => {
     if (best && Math.abs(best.score) > 0.35) doTwist(best.axis, it.p[best.axis], best.score > 0 ? 1 : -1);
     return;
   }
-  cube.rotateOnWorldAxis(new THREE.Vector3(0, 1, 0), dx * 0.008);
-  cube.rotateOnWorldAxis(new THREE.Vector3(1, 0, 0), dy * 0.008);
+  view.vy = dx * 0.0065; view.vp = dy * 0.0065;
+  view.yaw += view.vy;
+  view.pitch = Math.max(-PITCH_MAX, Math.min(PITCH_MAX, view.pitch + view.vp));
+  applyView();
 });
 const endDrag = () => { drag = null; };
 stage.addEventListener('pointerup', endDrag);
@@ -373,7 +427,14 @@ function loop(now) {
   }
   // Gentle showcase spin on menus only.
   idleSpin = !ui.home.hidden;
-  if (idleSpin && !drag) cube.rotateOnWorldAxis(new THREE.Vector3(0, 1, 0), 0.004);
+  if (idleSpin && !drag) { view.yaw += 0.004; applyView(); }
+  else if (!drag && (Math.abs(view.vy) > 1e-4 || Math.abs(view.vp) > 1e-4)) {
+    view.vy *= 0.9; view.vp *= 0.9;
+    view.yaw += view.vy;
+    view.pitch = Math.max(-PITCH_MAX, Math.min(PITCH_MAX, view.pitch + view.vp));
+    applyView();
+  }
+  if (!ui.hud.hidden && G.board) minimap.draw(G.board, cube.quaternion);
   renderer.render(scene, camera);
 }
 
