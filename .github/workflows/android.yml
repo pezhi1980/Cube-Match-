@@ -1,0 +1,63 @@
+name: Build APK
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      VERSION_CODE: ${{ github.run_number }}
+      VERSION_NAME: 0.1.${{ github.run_number }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Install and test
+        run: |
+          npm ci
+          npm test
+
+      - name: Build web and sync Android
+        run: |
+          npm run build
+          npx cap sync android
+
+      - name: Build APK
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleRelease --no-daemon
+          cp app/build/outputs/apk/release/app-release.apk ../CubeMatch-${{ env.VERSION_NAME }}.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: CubeMatch-${{ env.VERSION_NAME }}
+          path: CubeMatch-*.apk
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ env.VERSION_NAME }}
+          name: Cube Match ${{ env.VERSION_NAME }}
+          body: |
+            Test build. On your phone: download the APK below and open it to install
+            (allow "Install unknown apps" for your browser if asked).
+          files: CubeMatch-*.apk
+          make_latest: true

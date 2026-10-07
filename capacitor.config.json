@@ -1,0 +1,6 @@
+{
+  "appId": "com.pezhi1980.cubematch",
+  "appName": "Cube Match",
+  "webDir": "dist",
+  "android": { "backgroundColor": "#0b0a18" }
+}

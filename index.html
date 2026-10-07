@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#0b0a18">
+  <title>Cube Match</title>
+  <link rel="stylesheet" href="/src/style.css">
+</head>
+<body>
+  <div id="stage"></div>
+
+  <!-- HUD -->
+  <div id="hud" hidden>
+    <div class="hud-top">
+      <button class="icon-btn" id="btn-back" aria-label="Back">‹</button>
+      <div class="lvl" id="hud-level">Level 1</div>
+      <div class="moves"><span id="hud-moves">20</span><small>moves</small></div>
+    </div>
+    <div class="goals" id="hud-goals"></div>
+    <div class="score" id="hud-score">0</div>
+    <div class="combo" id="combo"></div>
+    <div class="tip" id="tip"></div>
+  </div>
+
+  <!-- Home -->
+  <section class="screen" id="home">
+    <h1 class="logo">CUBE<span>MATCH</span></h1>
+    <p class="tag">Twist the cube. Line up three.</p>
+    <div class="menu">
+      <button class="btn primary" id="btn-play">Play · Level 1</button>
+      <button class="btn" id="btn-levels">Levels</button>
+    </div>
+  </section>
+
+  <!-- Level select -->
+  <section class="screen" id="levels" hidden>
+    <div class="screen-head">
+      <button class="icon-btn" id="btn-levels-back" aria-label="Back">‹</button>
+      <h2>Levels</h2>
+    </div>
+    <div class="level-grid" id="level-grid"></div>
+  </section>
+
+  <!-- Result -->
+  <div class="modal" id="result" hidden>
+    <div class="card">
+      <h2 id="res-title">Level complete</h2>
+      <div class="stars" id="res-stars"></div>
+      <p id="res-text"></p>
+      <div class="menu">
+        <button class="btn primary" id="res-primary">Next</button>
+        <button class="btn" id="res-secondary">Retry</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>

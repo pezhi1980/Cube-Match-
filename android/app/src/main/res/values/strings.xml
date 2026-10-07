@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Cube Match</string>
+    <string name="title_activity_main">Cube Match</string>
+    <string name="package_name">com.pezhi1980.cubematch</string>
+    <string name="custom_url_scheme">com.pezhi1980.cubematch</string>
+</resources>
